@@ -6,6 +6,7 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
+from adaptdl.torch import AdaptiveDataLoader
 
 
 class SplittedDataset(object):
@@ -363,7 +364,8 @@ def get_dataloader(dset,
                    shuffle=True,
                    sample_by_length=True,
                    num_workers=2,
-                   pin_memory=True):
+                   pin_memory=True,
+                   adaptdl=False):
     vocab_src = dset.vocab_src
     vocab_tgt = dset.vocab_tgt
     assert vocab_src.PAD_ID == vocab_tgt.PAD_ID
@@ -399,7 +401,7 @@ def get_dataloader(dset,
             [item[1] for item in batch])
         return [src_seqs, src_lengths, tgt_seqs, tgt_seqs2, tgt_lengths]
 
-    if sample_by_length and shuffle:
+    if sample_by_length and shuffle and not adaptdl:
         ran_sampler = torch.utils.data.RandomSampler(dset)
         len_sampler = LenMatchBatchSampler(ran_sampler,
                                            batch_size=batch_size,
@@ -410,10 +412,12 @@ def get_dataloader(dset,
                                 batch_sampler=len_sampler,
                                 pin_memory=pin_memory)
     else:
-        dataloader = DataLoader(dset,
-                                batch_size=batch_size,
-                                shuffle=shuffle,
-                                num_workers=num_workers,
-                                collate_fn=my_collate,
-                                pin_memory=pin_memory)
+        dloader = AdaptiveDataLoader if adaptdl else DataLoader
+        dataloader = dloader(dset,
+                             batch_size=batch_size,
+                             shuffle=shuffle,
+                             num_workers=num_workers,
+                             collate_fn=my_collate,
+                             pin_memory=pin_memory,
+                             drop_last=adaptdl)
     return dataloader

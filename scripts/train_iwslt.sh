@@ -31,7 +31,8 @@ if [ -z "$1" ] || [ "$1" = "en-de" ]; then
     --dropout 0.3 \
     --act-dropout 0.1 \
     --attn-dropout 0.0 \
-    --embed-dropout 0.3
+    --embed-dropout 0.3 \
+    --adaptdl
 fi
 
 # de -> en
@@ -50,7 +51,7 @@ if [ -z "$1" ] || [ "$1" = "de-en" ]; then
     --decay-method inverse_sqrt \
     --weight-decay 0.0001 \
     --min-lr 1e-9 \
-    --batch-size 800 \
+    --batch-size 80 \
     --max-tokens 4096 \
     --warmup-steps 10000 \
     --gradient-accumulation 2 \

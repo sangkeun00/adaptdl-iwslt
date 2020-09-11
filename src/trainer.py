@@ -3,6 +3,7 @@ import argparse
 import time
 
 import torch
+import adaptdl
 
 from . import data_set
 from . import models
@@ -58,25 +59,37 @@ class Trainer(object):
             batch_size=args.batch_size,
             max_tokens=args.max_tokens,
             sample_by_length=False,
-            pin_memory=not self.cpu_only
+            pin_memory=not self.cpu_only,
+            adaptdl=args.adaptdl
         )
         self.val_loader = data_set.get_dataloader(
             dset=data_splits['val'],
             batch_size=args.eval_batch_size,
             sample_by_length=False,
-            pin_memory=not self.cpu_only
+            pin_memory=not self.cpu_only,
+            adaptdl=args.adaptdl
         )
         self.test_loader = data_set.get_dataloader(
             dset=data_splits['tst'],
             batch_size=args.eval_batch_size,
             shuffle=False,
             sample_by_length=False,
-            pin_memory=not self.cpu_only
+            pin_memory=not self.cpu_only,
+            adaptdl=args.adaptdl
         )
+
+        if args.adaptdl:
+            adaptdl.torch.init_process_group("nccl" if torch.cuda.is_available()
+                                             else "gloo")
+            self.model = adaptdl.torch.AdaptiveDataParallel(self.model,
+                                                            self.optimizer,
+                                                            self.scheduler)
 
     def train(self):
         best_ppl = 1e9
-        for epoch in range(1, self.args.max_epochs + 1):
+        eiterator = adaptdl.torch.remaining_epochs_until(self.args.max_epochs) \
+            if self.args.adaptdl else range(1, self.args.max_epochs + 1)
+        for epoch in eiterator:
             cum_loss = 0
             cum_nll = 0
             cum_tokens = 0
@@ -287,6 +300,7 @@ def parse_args():
                         default='train')
     parser.add_argument('--fp16', action='store_true', help='Use fp16')
     parser.add_argument('--gpu', type=int, default=0)
+    parser.add_argument('--adaptdl', action='store_true', help='Use adaptdl')
 
     # data parameters
     parser.add_argument('--lowercase', action='store_true')
