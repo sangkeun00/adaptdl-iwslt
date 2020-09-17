@@ -86,8 +86,10 @@ class Trainer(object):
                                                             self.optimizer,
                                                             self.scheduler)
             scale = 1
+            self.train_loader._elastic.current_local_bsz = \
+                math.ceil(args.batch_size * scale / adaptdl.env.num_replicas())
             self.train_loader._elastic._sync_local_bsz = \
-                lambda: math.ceil(args.batch_size * scale / adaptdl.env.num_replicas())
+                lambda: self.train_loader._elastic.current_local_bsz
             self.train_loader.autoscale_batch_size(1028,
                                                    local_bsz_bounds=(32, 256))
 
