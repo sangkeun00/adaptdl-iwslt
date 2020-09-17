@@ -1,6 +1,7 @@
 import os
 import argparse
 import time
+import math
 
 import torch
 import adaptdl
@@ -84,6 +85,10 @@ class Trainer(object):
             self.model = adaptdl.torch.AdaptiveDataParallel(self.model,
                                                             self.optimizer,
                                                             self.scheduler)
+            #self.train_loader._elastic._sync_local_bsz = \
+            #    lambda: math.ceil(scaled_batch_size / adaptdl.env.num_replicas())
+            self.train_loader.autoscale_batch_size(1028,
+                                                   local_bsz_bounds=(32, 128))
 
     def train(self):
         best_ppl = 1e9
