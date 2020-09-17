@@ -55,14 +55,6 @@ class Trainer(object):
                 min_lr=args.min_lr
             )
 
-        if args.adaptdl:
-            # BSZ scaling up based on # of replicas
-            # args.batch_size = args.batch_size * adaptdl.env.num_replicas()
-
-            # or based on the custom constant
-            scale = 1
-            args.batch_size = args.batch_size * scale
-
         self.train_loader = data_set.get_dataloader(
             dset=data_splits['trn'],
             batch_size=args.batch_size,
@@ -93,8 +85,9 @@ class Trainer(object):
             self.model = adaptdl.torch.AdaptiveDataParallel(self.model,
                                                             self.optimizer,
                                                             self.scheduler)
+            scale = 1
             self.train_loader._elastic._sync_local_bsz = \
-                lambda: math.ceil(args.batch_size / adaptdl.env.num_replicas())
+                lambda: math.ceil(args.batch_size * scale / adaptdl.env.num_replicas())
             self.train_loader.autoscale_batch_size(1028,
                                                    local_bsz_bounds=(32, 256))
 
