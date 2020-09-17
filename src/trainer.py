@@ -55,6 +55,9 @@ class Trainer(object):
                 min_lr=args.min_lr
             )
 
+        if args.adaptdl:
+            args.batch_size = args.batch_size * adaptdl.env.num_replicas()
+
         self.train_loader = data_set.get_dataloader(
             dset=data_splits['trn'],
             batch_size=args.batch_size,
@@ -88,7 +91,7 @@ class Trainer(object):
             #self.train_loader._elastic._sync_local_bsz = \
             #    lambda: math.ceil(scaled_batch_size / adaptdl.env.num_replicas())
             self.train_loader.autoscale_batch_size(1028,
-                                                   local_bsz_bounds=(32, 128))
+                                                   local_bsz_bounds=(32, 256))
 
     def train(self):
         best_ppl = 1e9

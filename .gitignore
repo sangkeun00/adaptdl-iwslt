@@ -9,3 +9,4 @@ scripts/gdrive.sh
 save/
 /test_data/single/vocab.bpe.*
 lightning_logs/
+/models/
