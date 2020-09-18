@@ -159,7 +159,7 @@ class Trainer(object):
             print(('nll loss: {:.3f}, ppl: {:.3f}, '
                    'best ppl: {:.3f}').format(val_loss, val_ppl, best_ppl))
 
-            if adaptdl.env.rank() == 0:
+            if adaptdl.env.replica_rank() == 0:
                 if (self.args.save_epochs <= 1
                         or epoch % self.args.save_epochs == 0):
                     self.save(self.args.save_path, epoch)
