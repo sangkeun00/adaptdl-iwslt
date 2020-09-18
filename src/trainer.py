@@ -5,6 +5,7 @@ import math
 
 import torch
 import adaptdl
+import adaptdl.env
 
 from . import data_set
 from . import models
@@ -158,12 +159,13 @@ class Trainer(object):
             print(('nll loss: {:.3f}, ppl: {:.3f}, '
                    'best ppl: {:.3f}').format(val_loss, val_ppl, best_ppl))
 
-            if (self.args.save_epochs <= 1
-                    or epoch % self.args.save_epochs == 0):
-                self.save(self.args.save_path, epoch)
-            if val_ppl == best_ppl:
-                print('[*] Best model is changed!')
-                self.save(self.args.save_path, verbose=False)
+            if adaptdl.env.rank() == 0:
+                if (self.args.save_epochs <= 1
+                        or epoch % self.args.save_epochs == 0):
+                    self.save(self.args.save_path, epoch)
+                if val_ppl == best_ppl:
+                    print('[*] Best model is changed!')
+                    self.save(self.args.save_path, verbose=False)
 
     def validation(self, dl=None):
         is_training = self.model.training
