@@ -259,7 +259,13 @@ class Trainer(object):
     def load(self, path):
         if self.args.fp16:
             self.model.float()
-        self.model.load_state_dict(torch.load(path, map_location=self.device))
+        state_dict = torch.load(path, map_location=self.device)
+        from collections import OrderedDict
+        new_state_dict = OrderedDict()
+        for k, v in state_dict.items():
+            name = k[7:]
+            new_state_dict[name] = v
+        self.model.load_state_dict(new_state_dict)
 
         if self.args.fp16:
             self.model.half()

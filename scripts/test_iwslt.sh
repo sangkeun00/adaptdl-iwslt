@@ -3,17 +3,18 @@
 mkdir -p outputs
 if [ -z "$1" ] || [ "$1" = "en-de" ]; then
   python3 -m src.bin.avg_models \
-    models/en-de/model50.pth \
-    models/en-de/model49.pth \
-    models/en-de/model48.pth \
-    models/en-de/model47.pth \
-    models/en-de/model46.pth \
-    models/en-de/model45.pth \
-    models/en-de/model44.pth \
-    models/en-de/model43.pth \
-    models/en-de/model52.pth \
-    models/en-de/model51.pth \
+    models/en-de/model5.pth \
+    models/en-de/model4.pth \
+    models/en-de/model3.pth \
+    models/en-de/model2.pth \
+    models/en-de/model1.pth \
     --output models/en-de/model.avg.pth
+    #models/en-de/model45.pth \
+    #models/en-de/model44.pth \
+    #models/en-de/model43.pth \
+    #models/en-de/model52.pth \
+    #models/en-de/model51.pth \
+    #--output models/en-de/model.avg.pth
 
   python3 -m src.trainer \
     --mode test \
