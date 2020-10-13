@@ -9,7 +9,7 @@ if [ -z "$1" ] || [ "$1" = "en-de" ]; then
     --lang-tgt de \
     --save-path models/en-de \
     --max-epochs 60 \
-    --learning-rate 1e-3 \
+    --learning-rate 5e-4 \
     --optim adamw \
     --betas 0.9 0.98 \
     --decay-method inverse_sqrt \

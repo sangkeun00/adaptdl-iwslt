@@ -56,6 +56,7 @@ class Trainer(object):
             )
         else:
             raise ValueError
+
         self.scheduler = optim.lr_scheduler.InverseSqrtScheduler(
             self.optimizer,
             warmup_steps=args.warmup_steps,
@@ -67,7 +68,7 @@ class Trainer(object):
             dset=data_splits['trn'],
             batch_size=args.batch_size,
             max_tokens=args.max_tokens,
-            sample_by_length=False,
+            sample_by_length=True,
             pin_memory=not self.cpu_only,
             adaptdl=args.adaptdl
         )
@@ -162,28 +163,11 @@ class Trainer(object):
 
                 # Optimizer update
                 loss.backward()
-                # self.optimizer.step()
-                # if step % self.args.gradient_accumulation == 0:
-                #     self.optimizer.zero_grad()
-                #     if self.scheduler is not None:
-                #         assert self.args.adaptdl
-                #         self.scheduler.step()
-                #     else:
-                #         assert not self.args.adaptdl
-                #         gain = self.optimizer.gain
-                #         effective_it += gain
-                #         if effective_it < self.args.warmup_steps:
-                #             new_lr = self.args.learning_rate * effective_it / self.args.warmup_steps
-                #         else:
-                #             new_lr = self.args.learning_rate * (max(1, self.args.warmup_steps) / effective_it) ** 0.5
-                #         for group in self.optimizer.optimizer.param_groups:
-                #             # print('\n', group["lr"])
-                #             group["lr"] = new_lr
                 if step % self.args.gradient_accumulation == 0:
                     self.optimizer.step()
 
                 if step % self.args.gradient_accumulation * self.args.scale == 0:
-                    self.optimizer.step()
+                    self.optimizer.zero_grad()
 
                     # update lr
                     if self.scheduler is not None:
@@ -219,7 +203,7 @@ class Trainer(object):
                           idx + 1,
                           len(self.train_loader),
                           gain,
-                          avg_loss,
+                          avg_loss * self.args.gradient_accumulation,
                           avg_nll,
                           avg_ppl,
                           cur_time - begin_time),
@@ -338,7 +322,8 @@ class Trainer(object):
 
 def main():
     args = parse_args()
-    print(str(args))
+    from pprint import pprint
+    pprint(str(args))
 
     # initialize dataset
     data_splits = data_set.SplittedDataset(args.data_dir,
