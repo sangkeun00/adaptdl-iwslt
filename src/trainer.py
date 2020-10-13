@@ -22,12 +22,14 @@ class Trainer(object):
         self.device = device
         self.cpu_only = (device == torch.device('cpu'))
 
+        # init model
         self.model = models.transformer.Transformer(
             args=args,
             src_dict=data_splits.vocab_src,
             tgt_dict=data_splits.vocab_tgt,
         ).to(device)
 
+        # init optimizer & lr_scheduler
         if args.optim == 'adam':
             self.optimizer = torch.optim.Adam(
                 params=self.model.parameters(),
@@ -54,7 +56,13 @@ class Trainer(object):
             )
         else:
             raise ValueError
+        self.scheduler = optim.lr_scheduler.InverseSqrtScheduler(
+            self.optimizer.optimizer,
+            warmup_steps=args.warmup_steps,
+            min_lr=args.min_lr
+        )
 
+        # init data loaders
         self.train_loader = data_set.get_dataloader(
             dset=data_splits['trn'],
             batch_size=args.batch_size,
@@ -79,28 +87,32 @@ class Trainer(object):
             adaptdl=args.adaptdl
         )
 
+        # handle experiment environment
         if args.adaptdl:
-            print("[*] Adaptdl is loaded!")
-            adaptdl.torch.init_process_group("nccl" if torch.cuda.is_available()
-                                             else "gloo")
-            self.scheduler = optim.lr_scheduler.InverseSqrtScheduler(
-                self.optimizer.optimizer,
-                warmup_steps=args.warmup_steps,
-                min_lr=args.min_lr
+            print("[*] Adaptdl is enabled!")
+            adaptdl.torch.init_process_group(
+                "nccl" if torch.cuda.is_available() else "gloo"
             )
-            self.model = adaptdl.torch.AdaptiveDataParallel(self.model,
-                                                            self.optimizer,
-                                                            self.scheduler)
+            self.model = adaptdl.torch.AdaptiveDataParallel(
+                self.model,
+                self.optimizer,
+                self.scheduler
+            )
             scale = 1
             self.train_loader._elastic.current_local_bsz = \
                 math.ceil(args.batch_size * scale / adaptdl.env.num_replicas())
             self.train_loader._elastic._sync_local_bsz = \
                 lambda: self.train_loader._elastic.current_local_bsz
-            self.train_loader.autoscale_batch_size(1028,
-                                                   local_bsz_bounds=(32, 256))
-        else:
-            self.optimizer = optim.adascale.EfficientAdaScale(self.optimizer,
-                                                              scale=args.gradient_accumulation)
+            self.train_loader.autoscale_batch_size(
+                1028,
+                local_bsz_bounds=(32, 256)
+            )
+        elif args.adascale:
+            print("[*] AdaScale is enabled!")
+            self.optimizer = optim.adascale.EfficientAdaScale(
+                optimizer=self.optimizer,
+                scale=args.gradient_accumulation
+            )
             self.scheduler = None
 
     def train(self):
@@ -334,6 +346,7 @@ def parse_args():
     parser.add_argument('--fp16', action='store_true', help='Use fp16')
     parser.add_argument('--gpu', type=int, default=0)
     parser.add_argument('--adaptdl', action='store_true', help='Use adaptdl')
+    parser.add_argument('--adascale', action='store_true', help='Use AdaScale')
 
     # data parameters
     parser.add_argument('--lowercase', action='store_true')
