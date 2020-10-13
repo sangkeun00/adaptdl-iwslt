@@ -57,7 +57,7 @@ class Trainer(object):
         else:
             raise ValueError
         self.scheduler = optim.lr_scheduler.InverseSqrtScheduler(
-            self.optimizer.optimizer,
+            self.optimizer,
             warmup_steps=args.warmup_steps,
             min_lr=args.min_lr
         )
@@ -115,18 +115,27 @@ class Trainer(object):
             )
             self.scheduler = None
 
+        if not args.adascale:
+            assert args.scale == 1
+
     def train(self):
+        # logging variables
         best_ppl = 1e9
         step = 0
         gain = 1
         effective_it = 0
+
+        # initialize epoch iterator
         eiterator = adaptdl.torch.remaining_epochs_until(self.args.max_epochs) \
             if self.args.adaptdl else range(1, self.args.max_epochs + 1)
-        self.optimizer.zero_grad()
+
+        # initialize optimizer lr at step 0
         if self.scheduler is None:
             assert not self.args.adaptdl
             for group in self.optimizer.optimizer.param_groups:
                 group["lr"] = 1e-9
+
+        self.optimizer.zero_grad()
         for epoch in eiterator:
             cum_loss = 0
             cum_nll = 0
@@ -149,25 +158,50 @@ class Trainer(object):
                     targets=tgt_out,
                     label_smoothing=self.args.label_smoothing,
                 )
+                loss /= self.args.gradient_accumulation
 
                 # Optimizer update
                 loss.backward()
-                self.optimizer.step()
+                # self.optimizer.step()
+                # if step % self.args.gradient_accumulation == 0:
+                #     self.optimizer.zero_grad()
+                #     if self.scheduler is not None:
+                #         assert self.args.adaptdl
+                #         self.scheduler.step()
+                #     else:
+                #         assert not self.args.adaptdl
+                #         gain = self.optimizer.gain
+                #         effective_it += gain
+                #         if effective_it < self.args.warmup_steps:
+                #             new_lr = self.args.learning_rate * effective_it / self.args.warmup_steps
+                #         else:
+                #             new_lr = self.args.learning_rate * (max(1, self.args.warmup_steps) / effective_it) ** 0.5
+                #         for group in self.optimizer.optimizer.param_groups:
+                #             # print('\n', group["lr"])
+                #             group["lr"] = new_lr
                 if step % self.args.gradient_accumulation == 0:
-                    self.optimizer.zero_grad()
+                    self.optimizer.step()
+
+                if step % self.args.gradient_accumulation * self.args.scale == 0:
+                    self.optimizer.step()
+
+                    # update lr
                     if self.scheduler is not None:
-                        assert self.args.adaptdl
+                        assert not self.args.adascale
                         self.scheduler.step()
                     else:
-                        assert not self.args.adaptdl
+                        assert self.args.adascale
                         gain = self.optimizer.gain
                         effective_it += gain
+
                         if effective_it < self.args.warmup_steps:
-                            new_lr = self.args.learning_rate * effective_it / self.args.warmup_steps
+                            new_lr = self.args.learning_rate * \
+                                effective_it / self.args.warmup_steps
                         else:
-                            new_lr = self.args.learning_rate * (max(1, self.args.warmup_steps) / effective_it) ** 0.5
+                            new_lr = self.args.learning_rate * \
+                                (self.args.warmup_steps / effective_it) ** 0.5
+
                         for group in self.optimizer.optimizer.param_groups:
-                            # print('\n', group["lr"])
                             group["lr"] = new_lr
 
                 # Logging
@@ -373,6 +407,7 @@ def parse_args():
     parser.add_argument('--max-tokens', type=int, default=4096)
     parser.add_argument('--label-smoothing', type=float, default=0.)
     parser.add_argument('--gradient-accumulation', type=int, default=2)
+    parser.add_argument('--scale', type=int, default=1)
 
     # testing parameters
     parser.add_argument('--init-checkpoint', nargs='+')
