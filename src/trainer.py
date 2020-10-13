@@ -33,28 +33,27 @@ class Trainer(object):
                 params=self.model.parameters(),
                 lr=args.learning_rate,
                 betas=args.betas,
-                weight_decay=args.weight_decay
+                weight_decay=args.weight_decay,
+                eps=1e-8
+            )
+        elif args.optim == 'adam2':
+            self.optimizer = optim.adam2.Adam2(
+                params=self.model.parameters(),
+                lr=args.learning_rate,
+                betas=args.betas,
+                weight_decay=args.weight_decay,
+                eps=1e-8
             )
         elif args.optim == 'adamw':
             self.optimizer = torch.optim.AdamW(
                 params=self.model.parameters(),
                 lr=args.learning_rate,
                 betas=args.betas,
-                weight_decay=args.weight_decay
+                weight_decay=args.weight_decay,
+                eps=1e-8
             )
         else:
             raise ValueError
-
-        if args.fp16:
-            raise NotImplementedError('fp16 is disallowed!')
-
-        self.scheduler = None
-        if args.decay_method == 'inverse_sqrt' and not args.fp16:
-            self.scheduler = optim.lr_scheduler.InverseSqrtScheduler(
-                self.optimizer,
-                warmup_steps=args.warmup_steps,
-                min_lr=args.min_lr
-            )
 
         self.train_loader = data_set.get_dataloader(
             dset=data_splits['trn'],
@@ -67,7 +66,7 @@ class Trainer(object):
         self.val_loader = data_set.get_dataloader(
             dset=data_splits['val'],
             batch_size=args.eval_batch_size,
-            sample_by_length=False,
+            sample_by_length=True,
             pin_memory=not self.cpu_only,
             adaptdl=args.adaptdl
         )
@@ -81,8 +80,14 @@ class Trainer(object):
         )
 
         if args.adaptdl:
+            print("[*] Adaptdl is loaded!")
             adaptdl.torch.init_process_group("nccl" if torch.cuda.is_available()
                                              else "gloo")
+            self.scheduler = optim.lr_scheduler.InverseSqrtScheduler(
+                self.optimizer.optimizer,
+                warmup_steps=args.warmup_steps,
+                min_lr=args.min_lr
+            )
             self.model = adaptdl.torch.AdaptiveDataParallel(self.model,
                                                             self.optimizer,
                                                             self.scheduler)
@@ -93,21 +98,34 @@ class Trainer(object):
                 lambda: self.train_loader._elastic.current_local_bsz
             self.train_loader.autoscale_batch_size(1028,
                                                    local_bsz_bounds=(32, 256))
+        else:
+            self.optimizer = optim.adascale.EfficientAdaScale(self.optimizer,
+                                                              scale=args.gradient_accumulation)
+            self.scheduler = None
 
     def train(self):
         best_ppl = 1e9
+        step = 0
+        gain = 1
+        effective_it = 0
         eiterator = adaptdl.torch.remaining_epochs_until(self.args.max_epochs) \
             if self.args.adaptdl else range(1, self.args.max_epochs + 1)
+        self.optimizer.zero_grad()
+        if self.scheduler is None:
+            assert not self.args.adaptdl
+            for group in self.optimizer.optimizer.param_groups:
+                group["lr"] = 1e-9
         for epoch in eiterator:
             cum_loss = 0
             cum_nll = 0
             cum_tokens = 0
             begin_time = time.time()
-            self.optimizer.zero_grad()
             print('=' * os.get_terminal_size()[0])
             print('Epoch {} ::: Train'.format(epoch))
             for idx, batch in enumerate(
                     utils.yield_to_device(self.train_loader, self.device)):
+                step += 1
+
                 # Data loading
                 src, src_lens, tgt_in, tgt_out, tgt_lens = batch
 
@@ -121,15 +139,24 @@ class Trainer(object):
                 )
 
                 # Optimizer update
-                if not self.args.fp16:
-                    loss.backward()
-                else:
-                    self.optimizer.backward(loss)
-                if (idx + 1) % self.args.gradient_accumulation == 0:
-                    self.optimizer.step()
+                loss.backward()
+                self.optimizer.step()
+                if step % self.args.gradient_accumulation == 0:
                     self.optimizer.zero_grad()
                     if self.scheduler is not None:
+                        assert self.args.adaptdl
                         self.scheduler.step()
+                    else:
+                        assert not self.args.adaptdl
+                        gain = self.optimizer.gain
+                        effective_it += gain
+                        if effective_it < self.args.warmup_steps:
+                            new_lr = self.args.learning_rate * effective_it / self.args.warmup_steps
+                        else:
+                            new_lr = self.args.learning_rate * (max(1, self.args.warmup_steps) / effective_it) ** 0.5
+                        for group in self.optimizer.optimizer.param_groups:
+                            # print('\n', group["lr"])
+                            group["lr"] = new_lr
 
                 # Logging
                 cur_loss = loss.item()
@@ -141,10 +168,11 @@ class Trainer(object):
                 avg_nll = cum_nll / cum_tokens
                 avg_ppl = 2**avg_nll
                 cur_time = time.time()
-                print(('\r[step {:4d}/{}] loss: {:.3f}, '
+                print(('\r[step {:4d}/{}] gain: {:.3f}, loss: {:.3f}, '
                        'nll loss: {:.3f}, ppl: {:.3f}, time: {:.1f}s').format(
                           idx + 1,
                           len(self.train_loader),
+                          gain,
                           avg_loss,
                           avg_nll,
                           avg_ppl,
@@ -159,7 +187,7 @@ class Trainer(object):
             print(('nll loss: {:.3f}, ppl: {:.3f}, '
                    'best ppl: {:.3f}').format(val_loss, val_ppl, best_ppl))
 
-            if adaptdl.env.replica_rank() == 0:
+            if not self.args.adaptdl or adaptdl.env.replica_rank() == 0:
                 if (self.args.save_epochs <= 1
                         or epoch % self.args.save_epochs == 0):
                     self.save(self.args.save_path, epoch)
@@ -245,20 +273,12 @@ class Trainer(object):
         else:
             save_path = os.path.join(path, 'model.pth')
 
-        # Convert model to fp32 if using mixed precision
-        if self.args.fp16:
-            self.model.float()
         torch.save(self.model.state_dict(), save_path)
-
-        if self.args.fp16:
-            self.model.half()
 
         if verbose:
             print('[*] Model is saved in \'{}\'.'.format(save_path))
 
     def load(self, path):
-        if self.args.fp16:
-            self.model.float()
         state_dict = torch.load(path, map_location=self.device)
         from collections import OrderedDict
         new_state_dict = OrderedDict()
@@ -266,9 +286,6 @@ class Trainer(object):
             name = k[7:] if k[:7] == 'module.' else k
             new_state_dict[name] = v
         self.model.load_state_dict(new_state_dict)
-
-        if self.args.fp16:
-            self.model.half()
 
         print('[*] Model is loaded from \'{}\''.format(path))
 
@@ -331,7 +348,7 @@ def parse_args():
                         default=5e-4,
                         help='learning rate')
     parser.add_argument('--betas', type=float, nargs=2, default=(0.9, 0.997))
-    parser.add_argument('--optim', choices=('adam', 'adamw'), default='adamw')
+    parser.add_argument('--optim', choices=('adam', 'adamw', 'adam2'), default='adamw')
     parser.add_argument('--decay-method',
                         choices=('inverse_sqrt', 'cos'),
                         default='inverse_sqrt')
