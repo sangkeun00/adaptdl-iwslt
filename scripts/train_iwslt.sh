@@ -18,7 +18,7 @@ if [ -z "$1" ] || [ "$1" = "en-de" ]; then
     --batch-size 80 \
     --max-tokens 4096 \
     --warmup-steps 10000 \
-    --gradient-accumulation 1 \
+    --gradient-accumulation 2 \
     --dec-embed-dim 512 \
     --dec-ffn-dim 1024 \
     --dec-num-heads 4 \
@@ -31,8 +31,7 @@ if [ -z "$1" ] || [ "$1" = "en-de" ]; then
     --dropout 0.3 \
     --act-dropout 0.1 \
     --attn-dropout 0.0 \
-    --embed-dropout 0.3 \
-    --adaptdl
+    --embed-dropout 0.3
 fi
 
 # de -> en
