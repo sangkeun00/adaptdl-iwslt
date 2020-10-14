@@ -68,14 +68,12 @@ class Trainer(object):
             dset=data_splits['trn'],
             batch_size=args.batch_size,
             max_tokens=args.max_tokens,
-            sample_by_length=True,
             pin_memory=not self.cpu_only,
             adaptdl=args.adaptdl
         )
         self.val_loader = data_set.get_dataloader(
             dset=data_splits['val'],
             batch_size=args.eval_batch_size,
-            sample_by_length=True,
             pin_memory=not self.cpu_only,
             adaptdl=args.adaptdl
         )
@@ -83,7 +81,6 @@ class Trainer(object):
             dset=data_splits['tst'],
             batch_size=args.eval_batch_size,
             shuffle=False,
-            sample_by_length=False,
             pin_memory=not self.cpu_only,
             adaptdl=args.adaptdl
         )
@@ -159,7 +156,7 @@ class Trainer(object):
                     targets=tgt_out,
                     label_smoothing=self.args.label_smoothing,
                 )
-                loss /= self.args.gradient_accumulation
+                # loss /= self.args.gradient_accumulation
 
                 # Optimizer update
                 loss.backward()
@@ -332,7 +329,7 @@ def main():
                                            lowercase=args.lowercase)
 
     cuda_device = 'cuda:{}'.format(args.gpu)
-    use_cuda = args.gpu >= 0 and torch.cuda.is_available()
+    use_cuda = torch.cuda.is_available()
     device = torch.device(cuda_device if use_cuda else 'cpu')
     # initialize trainer
     trainer = Trainer(args, data_splits, device)
