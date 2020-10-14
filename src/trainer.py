@@ -109,7 +109,7 @@ class Trainer(object):
             print("[*] AdaScale is enabled!")
             self.optimizer = optim.adascale.EfficientAdaScale(
                 optimizer=self.optimizer,
-                scale=args.gradient_accumulation
+                scale=args.scale
             )
             self.scheduler = None
 
@@ -156,7 +156,7 @@ class Trainer(object):
                     targets=tgt_out,
                     label_smoothing=self.args.label_smoothing,
                 )
-                # loss /= self.args.gradient_accumulation
+                #loss /= self.args.gradient_accumulation
 
                 # Optimizer update
                 loss.backward()
