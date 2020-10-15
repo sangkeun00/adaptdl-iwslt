@@ -223,6 +223,124 @@ class Trainer(object):
                     print('[*] Best model is changed!')
                     self.save(self.args.save_path, verbose=False)
 
+    def train_iter(self):
+        # global logging variables
+        best_ppl = 1e9
+        step = 0
+        gain = 1
+        it = 0
+        loader = iter(self.train_loader)
+        loader_len = len(self.train_loader) / self.args.gradient_accumulation
+        epoch = -1
+
+        # epoch-wise logging variables
+        cmu_loss = 0
+        cum_nll = 0
+        cum_tokens = 0
+        begin_time = time.time()
+
+        # initialize optimizer lr at step 0
+        if self.scheduler is None:
+            assert not self.args.adaptdl
+            for group in self.optimizer.optimizer.param_groups:
+                group["lr"] = 1e-9
+
+        # training loop
+        self.optimizer.zero_grad()
+        while it < loader_len * self.args.max_epochs:
+            # epoch update & perform validation
+            if int(it / loader_len) > epoch:
+                epoch = int(it / loader_len)
+
+                # validation
+                if epoch > 0:
+                    val_loss, val_ppl = self.validation()
+                    best_ppl = min(best_ppl, val_ppl)
+                    print()
+                    print('-' * 50)
+                    print('Epoch {} ::: Validation'.format(epoch))
+                    print(('nll loss: {:.3f}, ppl: {:.3f}, '
+                           'best ppl: {:.3f}').format(val_loss, val_ppl, best_ppl))
+
+                    if not self.args.adaptdl or adaptdl.env.replica_rank() == 0:
+                        if self.args.save_epochs <= 1 or epoch % self.args.save_epochs == 0:
+                            self.save(self.args.save_path, epoch)
+                        if val_ppl == best_ppl:
+                            print('[*] Best model is changed!')
+                            self.save(self.args.save_path, verbose=False)
+
+                # initialize epoch-wise logging variables
+                cum_loss = 0
+                cum_nll = 0
+                cum_tokens = 0
+                begin_time = time.time()
+                print('=' * os.get_terminal_size()[0])
+                print('Epoch {} ::: Train'.format(epoch))
+
+            # batch loading
+            step += 1
+            # print('\nstep:', step)
+            try:
+                src, src_lens, tgt_in, tgt_out, tgt_lens = loader.next()
+            except StopIteration:
+                loader = iter(self.train_loader)
+                src, src_lens, tgt_in, tgt_out, tgt_lens = loader.next()
+            if torch.cuda.is_available():
+                src, src_lens, tgt_in, tgt_out, tgt_lens = src.cuda(), src_lens.cuda(), tgt_in.cuda(), tgt_out.cuda(), tgt_lens.cuda()
+
+            # Loss calculation
+            logits = self.model(src, src_lens, tgt_in, tgt_lens)
+            loss, nll = losses.masked_nll(
+                logits=logits,
+                lengths=tgt_lens,
+                targets=tgt_out,
+                label_smoothing=self.args.label_smoothing,
+            )
+            #loss /= self.args.gradient_accumulation
+
+            # Optimizer update
+            loss.backward()
+            if step % self.args.gradient_accumulation == 0:
+                # print('accum')
+                self.optimizer.step()
+
+            if step % int(self.args.gradient_accumulation * self.args.scale) == 0:
+                # print('step')
+                self.optimizer.zero_grad()
+                gain = self.optimizer.gain
+                it += gain
+
+                if it < self.args.warmup_steps:
+                    new_lr = self.args.learning_rate * \
+                        it / self.args.warmup_steps
+                else:
+                    new_lr = self.args.learning_rate * \
+                        (self.args.warmup_steps / it) ** 0.5
+
+                for group in self.optimizer.optimizer.param_groups:
+                    group["lr"] = new_lr
+
+            # Logging
+            cur_loss = loss.item()
+            cur_tokens = torch.sum(tgt_lens).cpu().item()
+            cum_loss += cur_loss * cur_tokens
+            cum_nll += nll * cur_tokens
+            cum_tokens += cur_tokens
+            avg_loss = cum_loss / cum_tokens
+            avg_nll = cum_nll / cum_tokens
+            avg_ppl = 2**avg_nll
+            cur_time = time.time()
+            print(('\r[Iter {:.2f}/{}] gain: {:.3f}, loss: {:.3f}, '
+                   'nll loss: {:.3f}, ppl: {:.3f}, time: {:.1f}s').format(
+                       it % loader_len,
+                       loader_len,
+                       gain,
+                       avg_loss * self.args.gradient_accumulation,
+                       avg_nll,
+                       avg_ppl,
+                       cur_time - begin_time),
+                  end='')
+
     def validation(self, dl=None):
         is_training = self.model.training
         self.model.eval()
@@ -337,7 +455,10 @@ def main():
     if args.init_checkpoint:
         trainer.load(args.init_checkpoint[0])
     if args.mode == 'train':
-        trainer.train()
+        if args.adascale:
+            trainer.train_iter()
+        else:
+            trainer.train()
     elif args.mode == 'val':
         print('path\tval_nll\tval_ppl\ttst_nll\ttst_ppl')
         for path in args.init_checkpoint:
