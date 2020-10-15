@@ -109,7 +109,8 @@ class Trainer(object):
             print("[*] AdaScale is enabled!")
             self.optimizer = optim.adascale.EfficientAdaScale(
                 optimizer=self.optimizer,
-                scale=args.scale
+                scale=args.scale,
+                adam=True
             )
             self.scheduler = None
 
@@ -163,7 +164,7 @@ class Trainer(object):
                 if step % self.args.gradient_accumulation == 0:
                     self.optimizer.step()
 
-                if step % self.args.gradient_accumulation * self.args.scale == 0:
+                if step % int(self.args.gradient_accumulation * self.args.scale) == 0:
                     self.optimizer.zero_grad()
 
                     # update lr
