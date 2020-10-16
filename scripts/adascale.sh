@@ -8,7 +8,7 @@ if [ -z "$1" ] || [ "$1" = "en-de" ]; then
     --lang-src en \
     --lang-tgt de \
     --save-path models/en-de \
-    --max-epochs 60 \
+    --max-epochs 80 \
     --learning-rate 5e-4 \
     --optim adamw \
     --betas 0.9 0.98 \
@@ -33,5 +33,5 @@ if [ -z "$1" ] || [ "$1" = "en-de" ]; then
     --attn-dropout 0.0 \
     --embed-dropout 0.3 \
     --adascale \
-    --scale 8
+    --scale 16
 fi

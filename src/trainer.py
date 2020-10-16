@@ -141,7 +141,7 @@ class Trainer(object):
             cum_tokens = 0
             begin_time = time.time()
             print('=' * os.get_terminal_size()[0])
-            print('Epoch {} ::: Train'.format(epoch))
+            print('Epoch {} ::: Train'.format(epoch + 1))
             for idx, batch in enumerate(
                     utils.yield_to_device(self.train_loader, self.device)):
                 step += 1
@@ -201,7 +201,7 @@ class Trainer(object):
                           idx + 1,
                           len(self.train_loader),
                           gain,
-                          avg_loss * self.args.gradient_accumulation,
+                          avg_loss,
                           avg_nll,
                           avg_ppl,
                           cur_time - begin_time),
@@ -279,7 +279,6 @@ class Trainer(object):
 
             # batch loading
             step += 1
-            # print('\nstep:', step)
             try:
                 src, src_lens, tgt_in, tgt_out, tgt_lens = loader.next()
             except StopIteration:
@@ -301,11 +300,9 @@ class Trainer(object):
             # Optimizer update
             loss.backward()
             if step % self.args.gradient_accumulation == 0:
-                # print('accum')
                 self.optimizer.step()
 
             if step % int(self.args.gradient_accumulation * self.args.scale) == 0:
-                # print('step')
                 self.optimizer.zero_grad()
                 gain = self.optimizer.gain
                 it += gain

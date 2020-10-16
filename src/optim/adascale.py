@@ -170,7 +170,9 @@ class EfficientAdaScale(object):
                     self.var = (self.var * (step2 - 1) + var) / step2
 
                 # calculate gain
-                gain = (self.mean + self.var) / (self.mean + self.var / effective_scale)
+                mean_final = self.mean if step2 > 100 else mean
+                var_final = self.var if step2 > 100 else var
+                gain = (mean_final + var_final) / (mean_final + var_final / effective_scale)
                 self.gain = float(gain.item())
 
                 # update learning rate according to gain

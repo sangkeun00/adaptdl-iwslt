@@ -17,7 +17,7 @@ if [ -z "$1" ] || [ "$1" = "en-de" ]; then
 
   python3 -m src.trainer \
     --mode test \
-    --init-checkpoint models/en-de/model.avg.pth \
+    --init-checkpoint models/en-de/model.pth \
     --decode-method beam \
     --beam-size 5 \
     --max-decode-length-multiplier 2.0 \
