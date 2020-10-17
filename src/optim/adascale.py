@@ -111,6 +111,7 @@ class EfficientAdaScale(object):
         scale=1,
         grad_accum=1,
         adam=False,
+        warmup_step=100,
         eps=1e-6
     ):
 
@@ -118,6 +119,7 @@ class EfficientAdaScale(object):
         self.scale = scale
         self.grad_accum = grad_accum
         self.adam = adam
+        self.warmup_step = warmup_step
         self.eps = eps
         self.smoothing = 1 - (scale * grad_accum) / 1000
 
@@ -168,10 +170,10 @@ class EfficientAdaScale(object):
                 else:
                     self.mean = (self.mean * (step2 - 1) + mean) / step2
                     self.var = (self.var * (step2 - 1) + var) / step2
+                mean_final = self.mean if step2 > self.warmup_step else mean
+                var_final = self.var if step2 > self.warmup_step else var
 
                 # calculate gain
-                mean_final = self.mean if step2 > 100 else mean
-                var_final = self.var if step2 > 100 else var
                 gain = (mean_final + var_final) / (mean_final + var_final / effective_scale)
                 self.gain = float(gain.item())
 

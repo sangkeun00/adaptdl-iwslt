@@ -9,7 +9,7 @@ if [ -z "$1" ] || [ "$1" = "en-de" ]; then
     --lang-tgt de \
     --save-path models/en-de \
     --max-epochs 60 \
-    --learning-rate 5e-4 \
+    --learning-rate 2.5e-4 \
     --optim adamw \
     --betas 0.9 0.98 \
     --decay-method inverse_sqrt \
@@ -31,5 +31,5 @@ if [ -z "$1" ] || [ "$1" = "en-de" ]; then
     --dropout 0.3 \
     --act-dropout 0.1 \
     --attn-dropout 0.0 \
-    --embed-dropout 0.3 --gpu 1
+    --embed-dropout 0.3
 fi

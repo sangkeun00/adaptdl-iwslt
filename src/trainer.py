@@ -141,7 +141,7 @@ class Trainer(object):
             cum_tokens = 0
             begin_time = time.time()
             print('=' * os.get_terminal_size()[0])
-            print('Epoch {} ::: Train'.format(epoch + 1))
+            print('Epoch {} ::: Train'.format(epoch))
             for idx, batch in enumerate(
                     utils.yield_to_device(self.train_loader, self.device)):
                 step += 1
@@ -223,7 +223,7 @@ class Trainer(object):
                     print('[*] Best model is changed!')
                     self.save(self.args.save_path, verbose=False)
 
-    def train_iter(self):
+    def train_adascale(self):
         # global logging variables
         best_ppl = 1e9
         step = 0
@@ -275,7 +275,7 @@ class Trainer(object):
                 cum_tokens = 0
                 begin_time = time.time()
                 print('=' * os.get_terminal_size()[0])
-                print('Epoch {} ::: Train'.format(epoch))
+                print('Epoch {} ::: Train'.format(epoch + 1))
 
             # batch loading
             step += 1
@@ -453,7 +453,7 @@ def main():
         trainer.load(args.init_checkpoint[0])
     if args.mode == 'train':
         if args.adascale:
-            trainer.train_iter()
+            trainer.train_adascale()
         else:
             trainer.train()
     elif args.mode == 'val':
