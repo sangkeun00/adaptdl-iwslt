@@ -180,7 +180,7 @@ class EfficientAdaScale(object):
                 # update learning rate according to gain
                 init_lr = [pg["lr"] for pg in self.optimizer.param_groups]
                 for group in self.optimizer.param_groups:
-                    group["lr"] = gain * group["lr"]
+                    group["lr"] = (gain ** 0.6) * group["lr"]
 
                 # update weights
                 self.optimizer.step()

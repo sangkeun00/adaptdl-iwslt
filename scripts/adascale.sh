@@ -1,15 +1,14 @@
 #!/bin/bash
 # en -> de
-if [ -z "$1" ] || [ "$1" = "en-de" ]; then
-  mkdir -p models/en-de
-  python3 -m src.trainer \
+mkdir -p models/en-de
+python3 -m src.trainer \
     --gpu 0 \
     --label-smoothing 0.1 \
     --lang-src en \
     --lang-tgt de \
     --save-path models/en-de \
-    --max-epochs 80 \
-    --learning-rate 2.5e-4 \
+    --max-epochs 60 \
+    --learning-rate 5e-4 \
     --optim adamw \
     --betas 0.9 0.98 \
     --decay-method inverse_sqrt \
@@ -33,5 +32,4 @@ if [ -z "$1" ] || [ "$1" = "en-de" ]; then
     --attn-dropout 0.0 \
     --embed-dropout 0.3 \
     --adascale \
-    --scale 64
-fi
+    --scale $1 | tee logs/scale$1.txt

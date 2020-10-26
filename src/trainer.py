@@ -140,7 +140,7 @@ class Trainer(object):
             cum_nll = 0
             cum_tokens = 0
             begin_time = time.time()
-            print('=' * os.get_terminal_size()[0])
+            print('=' * 70)
             print('Epoch {} ::: Train'.format(epoch))
             for idx, batch in enumerate(
                     utils.yield_to_device(self.train_loader, self.device)):
@@ -274,7 +274,7 @@ class Trainer(object):
                 cum_nll = 0
                 cum_tokens = 0
                 begin_time = time.time()
-                print('=' * os.get_terminal_size()[0])
+                print('=' * 70)
                 print('Epoch {} ::: Train'.format(epoch + 1))
 
             # batch loading
@@ -332,7 +332,7 @@ class Trainer(object):
                        it % loader_len,
                        loader_len,
                        gain,
-                       avg_loss * self.args.gradient_accumulation,
+                       avg_loss,
                        avg_nll,
                        avg_ppl,
                        cur_time - begin_time),
